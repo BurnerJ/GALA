@@ -2098,6 +2098,8 @@ class GuestMolecule(Molecule):
             lines = f.readlines()
 
         in_guest_section = False
+        in_vdw_section = False
+
         for index, line in enumerate(lines):
             if "&guest" in line:
                 in_guest_section = True
@@ -2107,25 +2109,39 @@ class GuestMolecule(Molecule):
 
             if in_guest_section:
                 if "ATOMS" in line:
-                    # Skip the ATOMS line and modify the subsequent lines
                     atom_idx = index + 1
-                    while not any(
-                        keyword in lines[atom_idx] for keyword in ["rigid", "Framework"]
-                    ):
+                    while not any(keyword in lines[atom_idx] for keyword in ["rigid", "Framework"]):
                         parts = lines[atom_idx].split()
                         if len(parts) > 3:
-                            if is_empty == False:
+                            if is_empty is False:
                                 parts = parts[:3] + ["1", "0"]
                             else:
-                                parts = parts[:2] + ["0", "1", "0"]
+                                parts = parts[:2] + ["0.000000", "1", "0"]
                             lines[atom_idx] = "    ".join(parts) + "\n"
                         atom_idx += 1
                     in_guest_section = False
 
             if "Framework" in line:
-                in_framework = True
                 lines[index + 1] = f"NUMMOLS {nummol_framework}\n"
                 continue
+
+            if line.strip().startswith("VDW"):
+                in_vdw_section = True
+                continue
+
+            if in_vdw_section:
+                if line.strip().lower() == "close":
+                    in_vdw_section = False
+                    continue
+                if is_empty:
+                    if " lj " in line:
+                        left, right = line.split("lj", 1)
+                        parts = right.split()
+                        if len(parts) >= 2:
+                            parts[-2] = "0.000000"
+                            parts[-1] = "0.000000"
+                            lines[index] = f"{left}lj {' '.join(parts)}\n"
+                else: pass
 
         with open(file_path, "w") as f:
             f.writelines(lines)
